@@ -182,8 +182,20 @@ export default class BaseView extends DisposableWithEvents {
     const updateSort = (spec: Sort.SortSpec) => {
       sortFunc.updateSpec(spec);
       this.sortedRows.updateSort((rowId1, rowId2) => {
-        const value = nativeCompare(rowId1 === "new", rowId2 === "new");
-        return value || sortFunc.compare(rowId1 as number, rowId2 as number);
+        // 1. Keep the "+" row pinned at the top
+        const isNew1 = rowId1 === "new";
+        const isNew2 = rowId2 === "new";
+        if (isNew1 || isNew2) {
+          return nativeCompare(isNew2, isNew1);
+        }
+
+        // 2. If the user explicitly sorted by a column, use it
+        if (spec && spec.length > 0) {
+          return sortFunc.compare(rowId1 as number, rowId2 as number);
+        }
+
+        // 3. Default unsorted: newest records on top (descending rowId)
+        return nativeCompare(rowId2 as number, rowId1 as number);
       });
     };
     this.autoDispose(this.viewSection.activeDisplaySortSpec.subscribe(updateSort));
@@ -510,7 +522,7 @@ export default class BaseView extends DisposableWithEvents {
     }
     const rowId = this.viewData.getRowId(this.cursor.rowIndex()!);
     // LazyArrayModel row model which is also used to build the cell dom. Needed since
-    // it may be used as a key to retrieve the cell dom, which is useful for editor placement.
+    // it may be used as a key to retrieve the cell dom, technical editor placement.
     const lazyRow = this.getRenderedRowModel(rowId);
     if (!lazyRow) {
       // TODO scroll into view. For now, just don't start discussion.
@@ -900,8 +912,7 @@ export default class BaseView extends DisposableWithEvents {
    * Returns the index of the last non-AddNew row in the grid.
    */
   protected getLastDataRowIndex() {
-    const last = this.viewData.peekLength - 1;
-    return (last >= 0 && this.viewData.getRowId(last) === "new") ? last - 1 : last;
+    return Math.max(0, this.viewData.peekLength - 1);
   }
 
   /**

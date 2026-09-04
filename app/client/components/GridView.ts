@@ -183,17 +183,18 @@ export default class GridView extends BaseView {
     const sectionOptions = viewSectionModel.optionsObj;
     this._rowIndexRenderer = gridOptions?.rowIndexRenderer ??
       (row => dom.domComputed((use) => {
+        if (row._isAddRow()) {
+          return "+";
+        }
         if (use(sectionOptions).rowNumbers === "rowId") {
           const rowId = use(row.id);
-          // The add-row's id observable is left blank (it has no rowId yet); show nothing for it.
           if (typeof rowId !== "number") { return null; }
           return dom("span.gridview_row_id", String(rowId));
         }
-        return String(use(row._index)! + 1);
+        const totalRows = use(this.sortedRows.getKoArray()).length;
+        const currentIdx = use(row._index)!;
+        return String(totalRows - currentIdx);
       }));
-    this._cornerRenderer = gridOptions?.cornerRenderer ??
-      (() => dom.on("click", () => this.selectAll()));
-    this.viewSection = viewSectionModel;
     this.isReadonly = this.gristDoc.isReadonly.get() ||
       this.viewSection.isVirtual() ||
       this.isPreview;
