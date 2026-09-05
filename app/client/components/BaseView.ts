@@ -178,27 +178,51 @@ export default class BaseView extends DisposableWithEvents {
     this.sortedRows = rowset.SortedRowSet.create(this, null as any, this.tableModel.tableData);
 
     // Create the sortFunc, and re-sort when sortSpec changes.
+// Create the sortFunc, and re-sort when sortSpec changes.
     const sortFunc = new SortFunc(new ClientColumnGetters(this.tableModel, { unversioned: true }));
     const updateSort = (spec: Sort.SortSpec) => {
       sortFunc.updateSpec(spec);
+      const rawOptions = ko.unwrap(this.viewSection.optionsObj);
+      const isReverse = Boolean(rawOptions && typeof rawOptions === "object" ? (rawOptions as any).reverseRowOrder : false);
+
       this.sortedRows.updateSort((rowId1, rowId2) => {
-        // 1. Keep the "+" row pinned at the top
         const isNew1 = rowId1 === "new";
         const isNew2 = rowId2 === "new";
-        if (isNew1 || isNew2) {
-          return nativeCompare(isNew2, isNew1);
-        }
 
-        // 2. If the user explicitly sorted by a column, use it
-        if (spec && spec.length > 0) {
-          return sortFunc.compare(rowId1 as number, rowId2 as number);
-        }
+        if (isReverse) {
+          // 1. PIN THE "+" ADD-ROW AT THE TOP:
+          // If rowId1 is "new", it comes first (-1). If rowId2 is "new", rowId1 comes after (1).
+          if (isNew1) { return -1; }
+          if (isNew2) { return 1; }
 
-        // 3. Default unsorted: newest records on top (descending rowId)
-        return nativeCompare(rowId2 as number, rowId1 as number);
+          // 2. User-applied column sort
+          if (spec && spec.length > 0) {
+            return sortFunc.compare(rowId1 as number, rowId2 as number);
+          }
+
+          // 3. Reverse chronological: higher row IDs (newest) first
+          return (rowId2 as number) - (rowId1 as number);
+        } else {
+          // 1. PIN THE "+" ADD-ROW AT THE BOTTOM:
+          // If rowId1 is "new", it comes last (1). If rowId2 is "new", rowId1 comes before (-1).
+          if (isNew1) { return 1; }
+          if (isNew2) { return -1; }
+
+          // 2. User-applied column sort
+          if (spec && spec.length > 0) {
+            return sortFunc.compare(rowId1 as number, rowId2 as number);
+          }
+
+          // 3. Normal chronological: lower row IDs (oldest) first
+          return (rowId1 as number) - (rowId2 as number);
+        }
       });
     };
+
     this.autoDispose(this.viewSection.activeDisplaySortSpec.subscribe(updateSort));
+    this.autoDispose(this.viewSection.optionsObj.subscribe(() => {
+      updateSort(this.viewSection.activeDisplaySortSpec.peek());
+    }));
     updateSort(this.viewSection.activeDisplaySortSpec.peek());
 
     // Here we are subscribed to the bulk of the data (main table, possibly filtered).
